@@ -14,7 +14,36 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1000 * 1000
 
 @app.route("/")
 def main_page():
-    return "REST API"
+    endpoints = (
+        ("/", "Main page"),
+        ("/user/<string:name>", "Search user"),
+        ("/welcome/<string:name>", "Welcome page"),
+        ("/welcome2/<string:name>", "Welcome page2"),
+        ("/hello", "SSTI page"),
+        ("/get_users", "Get users"),
+        ("/get_log/", "Get log"),
+        ("/read_file", "Read file"),
+        ("/deserialization/", "Deserialization"),
+        ("/get_admin_mail/<string:control>", "Get admin mail"),
+        ("/run_file", "Run file"),
+        ("/create_file", "Create file"),
+        ("/factorial/<int:n>", "Factorial"),
+        ("/login", "Login"),
+        ("/route", "Route"),
+        ("/logs", "Logs"),
+        ("/user_pass_control", "User pass control"),
+        ("/upload", "Upload file")
+    )
+    template = '''
+    <h1>Endpoints</h1>
+    <ul>
+    {% for endpoint in endpoints %}
+        <li>{{ endpoint[0] }} - {{ endpoint[1] }}</a></li>
+    {% endfor %}
+    </ul>
+    '''
+
+    return render_template_string(template, endpoints=endpoints)
 
 @app.route("/user/<string:name>")
 def search_user(name):
@@ -226,7 +255,7 @@ def uploadfile():
       '''
 
 def main():
-    app.run(host="0.0.0.0",port=8081)
+    app.run(host="127.0.0.1",port=8081)
 
 
 if __name__ == '__main__':
