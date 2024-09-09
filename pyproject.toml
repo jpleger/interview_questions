@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyinterview"
+dynamic = ["version"]
+description = 'Interview Questions'
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = []
+authors = [
+  { name = "James Pleger", email = "jpleger@gmail.com" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+  "flask",
+]
+[project.scripts]
+interview-app = "pyinterview.app:main"
+
+[project.urls]
+Documentation = "https://github.com/jpleger/pyinterview#readme"
+Issues = "https://github.com/jpleger/pyinterview/issues"
+Source = "https://github.com/jpleger/pyinterview"
+
+[tool.hatch.version]
+path = "src/pyinterview/__about__.py"
+
+[tool.hatch.envs.types]
+extra-dependencies = [
+  "mypy>=1.0.0",
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/pyinterview tests}"
+
+[tool.coverage.run]
+source_pkgs = ["pyinterview", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/pyinterview/__about__.py",
+]
+
+[tool.coverage.paths]
+pyinterview = ["src/pyinterview", "*/pyinterview/src/pyinterview"]
+tests = ["tests", "*/pyinterview/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
