@@ -1,8 +1,7 @@
 # Original source: https://github.com/videvelopers/Vulnerable-Flask-App/blob/main/vulnerable-flask-app-linux.py
 # GPL v3 License
 
-from flask import Flask, jsonify, render_template_string, request, Response
-from flask.logging import default_handler
+from flask import Flask, jsonify, render_template_string, request, Response, make_response
 import subprocess
 from werkzeug.datastructures import Headers
 from werkzeug.utils import secure_filename
@@ -10,6 +9,8 @@ import sqlite3
 import os
 import tempfile
 import logging
+import pickle
+import base64
 
 # Directory name for script
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -231,24 +232,104 @@ def factroial(n:int):
         connection[request.remote_addr] -= 1
     return jsonify(data=result), 200
 
-
-@app.route('/login',methods=["GET"])
+@app.route('/login',methods=["GET", "POST"])
 def login():
-    username=request.args.get("username")
-    passwd=request.args.get("password")
-    if "test" in username and "test" in passwd:
-        return jsonify(data="Login successful"), 200
-    else:
-        return jsonify(data="Login unsuccessful"), 403
+    """Login endpoint, used to login"""
+    username = request.form.get("username")
+    password = request.form.get("password")
+    con = sqlite3.connect(DB_FILENAME)
+    cur = con.cursor()
+    if username and password:
+        cur.execute("select * from users where username = '%s' and password = '%s'" % (username, password))
+        data = cur.fetchall()
+        if len(data) == 0:
+            response = make_response(render_template_string("Login failed!"))
+            response.status_code = 403
+            response.set_cookie("login", "false")
+            response.set_cookie("username", username)
+            return response
+        else:
+            response = make_response(render_template_string("Login successful"))
+            response.set_cookie("login", "true")
+            response.set_cookie("username", username)
+            return response
+    con.close()
+    return render_template_string('''<form method="post">
+                                  <input type="text" name="username" placeholder="Username">
+        <input type="password" name="password" placeholder="Password">
+        <input type="submit">'''), 200
 
-@app.route('/route')
-def route():
-    content_type = request.args.get("Content-Type")
-    response = Response()
-    headers = Headers()
-    headers.add("Content-Type", content_type)
-    response.headers = headers
+
+@app.route('/backup_login',methods=["GET"])
+def backup_login():
+    """Backup login endpoint, used to do admin tasks"""
+    username = request.args.get("username")
+    password = request.args.get("password")
+    if "admin" in username and "Sup3rS3cr3t" in password:
+        response = make_response(render_template_string("Login successful"))
+        response.set_cookie("admin", "true")
+        return response
+    else:
+        response = make_response(render_template_string("Login Failed"))
+        response.set_cookie("admin", "false")
+        response.status_code = 403
+        return response
+
+@app.route('/change_password',methods=["GET"])
+def change_password():
+    """Change password endpoint, used to change password"""
+    username = request.args["username"]
+    old_password = request.args.get("old_password", None)
+    new_password = request.args.get("new_password")
+    con = sqlite3.connect(DB_FILENAME)
+    cur = con.cursor()
+    if request.cookies.get("admin") == "true":
+        cur.execute("update users set password = '%s' where username = '%s'" % (new_password, username))
+        con.commit()
+        return jsonify(data="Password changed"), 200
+    # Check user/password in database
+    cur.execute("select * from users where username = '%s' and password = '%s'" % (username, old_password))
+    data = cur.fetchall()
+    if len(data) == 0:        
+        return jsonify(data="Password change failed"), 403
+    cur.execute("update users set password = '%s' where username = '%s'" % (new_password, username))
+    con.close()
+    return jsonify(data="Password changed"), 200
+
+
+@app.route('/set_header')
+def set_header():
+    """Add a custom header to responses, store as a pickled cookie"""
+    parsed_headers = {}
+    custom_headers = request.cookies.get("custom_headers", '')
+    if custom_headers:
+        # Decode the headers from the cookie
+        parsed_headers = base64.b64decode(custom_headers)
+        parsed_headers = pickle.loads(custom_headers)
+    header_name = request.args.get("header_name")
+    header_value = request.args.get("header_value")
+    parsed_headers[header_name] = header_value
+    response = make_response(render_template_string("Header set"))
+    response.set_cookie("custom_headers", base64.b64encode(pickle.dumps(parsed_headers)))
+    response.set_data()
     return response
+
+@app.route('/get_headers')
+def get_headers():
+    """Get headers from request"""
+    parsed_headers = {}
+    custom_headers = request.cookies.get("custom_headers", '')
+    if custom_headers:
+        # Decode the headers from the cookie
+        parsed_headers = base64.b64decode(custom_headers)
+        parsed_headers = pickle.loads(custom_headers)
+    headers = request.headers
+    headers = Headers()
+    headers.extend(parsed_headers)
+    response = make_response(render_template_string("{% for header, value in parsed_headers.items() %}{{ header }}{{ value }}{% endfor %}"))
+    response.headers = headers
+    return jsonify(data=str(headers)), 200
+
 
 @app.route('/logs')
 def ImproperOutputNeutralizationforLogs():
