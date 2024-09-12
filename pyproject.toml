@@ -29,7 +29,7 @@ dependencies = [
   "jupyterlab",
 ]
 [project.scripts]
-interview-app = "pyinterview.app:main"
+pyinterview = "pyinterview.app:main"
 
 [project.urls]
 Documentation = "https://github.com/jpleger/pyinterview#readme"

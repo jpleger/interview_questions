@@ -6,62 +6,120 @@ import subprocess
 from werkzeug.datastructures import Headers
 from werkzeug.utils import secure_filename
 import sqlite3
+import os
+import tempfile
+import logging
 
+# Directory name for script
+APP_ROOT = os.path.dirname(os.path.abspath(__file__))
+# Database path for sqlite3 DB
+DB_FILENAME = tempfile.mktemp(suffix=".db", prefix="pyinterview")
+# Create a temporary file for the logfile
+LOG_FILENAME = tempfile.mktemp(suffix=".log", prefix="pyinterview")
+# Setup logging, set the log level to DEBUG
+# Format string for logging
+log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+root_logger = logging.getLogger()
 
+# Output logging to a file
+file_handler = logging.FileHandler(LOG_FILENAME)
+file_handler.setFormatter(log_formatter)
+root_logger.addHandler(file_handler)
+
+# Output logging to the console
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(console_handler)
+root_logger.addHandler(console_handler)
+
+# logging.critical('Log File: %s' % LOG_FILENAME)
+
+# Instantiate the flask app
 app = Flask(__name__)
+
+
+# Start Python Interview App
 app.config['UPLOAD_FOLDER']='uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1000 * 1000
+DEBUG = True
 
 @app.route("/")
-def main_page():
-    endpoints = (
-        ("/", "Main page"),
-        ("/user/<string:name>", "Search user"),
-        ("/welcome/<string:name>", "Welcome page"),
-        ("/welcome2/<string:name>", "Welcome page2"),
-        ("/hello", "SSTI page"),
-        ("/get_users", "Get users"),
-        ("/get_log/", "Get log"),
-        ("/read_file", "Read file"),
-        ("/deserialization/", "Deserialization"),
-        ("/get_admin_mail/<string:control>", "Get admin mail"),
-        ("/run_file", "Run file"),
-        ("/create_file", "Create file"),
-        ("/factorial/<int:n>", "Factorial"),
-        ("/login", "Login"),
-        ("/route", "Route"),
-        ("/logs", "Logs"),
-        ("/user_pass_control", "User pass control"),
-        ("/upload", "Upload file")
-    )
+def index():
+    """Main page, this just returns a list of endpoints."""
+    endpoints = []
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint != 'static':
+            endpoints.append((rule.rule, app.view_functions[rule.endpoint].__doc__))
     template = '''
     <h1>Endpoints</h1>
     <ul>
     {% for endpoint in endpoints %}
-        <li>{{ endpoint[0] }} - {{ endpoint[1] }}</a></li>
+        <li>{{ endpoint[0] }} - {{ endpoint[1] }}</li>
     {% endfor %}
     </ul>
     '''
 
     return render_template_string(template, endpoints=endpoints)
 
-@app.route("/user/<string:name>")
-def search_user(name):
-    con = sqlite3.connect("test.db")
+@app.route('/ping')
+def ping():
+    """Simple health check endpoint, take the hostname from the request and ping it"""
+    server_name = request.base_url.split(':')[1]
+    server_name = server_name.replace("//", "")
+    command = 'ping -c 2 %s' % server_name
+    ping_result = subprocess.run(command, shell=True, capture_output=True).stdout.decode('utf-8')
+    return jsonify(command=command, data=ping_result), 200
+
+
+@app.route('/users/')
+def get_users():
+    """Return list of all users"""
+    con = sqlite3.connect(DB_FILENAME)
+    cur = con.cursor()
+    cur.execute("select username from test")
+    data = str(cur.fetchall())
+    logging.debug(data)
+    con.close()
+    return jsonify(data=data), 200
+
+@app.route('/user/<string:name>')
+def get_user(name=None):
+    """Return user details"""
+    con = sqlite3.connect(DB_FILENAME)
     cur = con.cursor()
     cur.execute("select * from test where username = '%s'" % name)
     data = str(cur.fetchall())
-    con.close()
-    import logging
-    logging.basicConfig(filename="restapi.log", filemode='w', level=logging.DEBUG)
     logging.debug(data)
-    return jsonify(data=data),200
+    con.close()
+    return jsonify(data=data), 200
 
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        admin = request.form.get('admin')
+        con = sqlite3.connect(DB_FILENAME)
+        cur = con.cursor()
+        cur.execute("insert into test (username, password, admin) values ('%s', '%s', '%s')" % (username, password, admin))
+        con.commit()
+        con.close()
+        return jsonify(data="User added"), 200
+    else:
+        return '''
+        <form method="post">
+            <input type="text" name="username" placeholder="Username">
+            <input type="password" name="password" placeholder="Password">
+            <input type="text" name="admin" hidden value="0">
+            <input type="submit">
+        </form>
+        '''
 
 @app.route("/welcome/<string:name>")
 def welcome(name):
-    data="Welcome "+name
-    return jsonify(data=data),200
+    """Used to welcome new users to the app, via email"""
+    data="Welcome " + name
+    return jsonify(data=data), 200
 
 @app.route("/welcome2/<string:name>")
 def welcome2(name):
@@ -82,16 +140,16 @@ def hello_ssti():
         logging.debug(str(template))
         return render_template_string(template)
 
-@app.route("/get_users")
-def get_users():
-    try:
-        hostname = request.args.get('hostname')
-        command = "dig " + hostname
-        data = subprocess.check_output(command, shell=True)
-        return data
-    except:
-        data = str(hostname) + " username didn't found"
-        return data
+# @app.route("/get_users")
+# def get_users():
+#     try:
+#         hostname = request.args.get('hostname')
+#         command = "dig " + hostname
+#         data = subprocess.check_output(command, shell=True)
+#         return data
+#     except:
+#         data = str(hostname) + " username didn't found"
+#         return data
 
 @app.route("/get_log/")
 def get_log():
@@ -255,7 +313,7 @@ def uploadfile():
       '''
 
 def main():
-    app.run(host="127.0.0.1",port=8081)
+    app.run(host="127.0.0.1", port=8081, debug=DEBUG)
 
 
 if __name__ == '__main__':
