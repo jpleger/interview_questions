@@ -2,6 +2,7 @@
 # GPL v3 License
 
 from flask import Flask, jsonify, render_template_string, request, Response
+from flask.logging import default_handler
 import subprocess
 from werkzeug.datastructures import Headers
 from werkzeug.utils import secure_filename
@@ -16,26 +17,9 @@ APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 DB_FILENAME = tempfile.mktemp(suffix=".db", prefix="pyinterview")
 # Create a temporary file for the logfile
 LOG_FILENAME = tempfile.mktemp(suffix=".log", prefix="pyinterview")
-# Setup logging, set the log level to DEBUG
-# Format string for logging
-log_formatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-root_logger = logging.getLogger()
-
-# Output logging to a file
-file_handler = logging.FileHandler(LOG_FILENAME)
-file_handler.setFormatter(log_formatter)
-root_logger.addHandler(file_handler)
-
-# Output logging to the console
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(console_handler)
-root_logger.addHandler(console_handler)
-
-# logging.critical('Log File: %s' % LOG_FILENAME)
 
 # Instantiate the flask app
 app = Flask(__name__)
-
 
 # Start Python Interview App
 app.config['UPLOAD_FOLDER']='uploads'
@@ -60,6 +44,17 @@ def index():
 
     return render_template_string(template, endpoints=endpoints)
 
+@app.route('/initdb')
+def initdb():
+    """Initialize the database"""
+    con = sqlite3.connect(DB_FILENAME)
+    cur = con.cursor()
+    cur.execute("create table users (username text, password text, admin integer)")
+    con.commit()
+    con.close()
+    return jsonify(data="Database initialized"), 200
+
+
 @app.route('/ping')
 def ping():
     """Simple health check endpoint, take the hostname from the request and ping it"""
@@ -75,7 +70,7 @@ def get_users():
     """Return list of all users"""
     con = sqlite3.connect(DB_FILENAME)
     cur = con.cursor()
-    cur.execute("select username from test")
+    cur.execute("select username from users")
     data = str(cur.fetchall())
     logging.debug(data)
     con.close()
@@ -86,7 +81,7 @@ def get_user(name=None):
     """Return user details"""
     con = sqlite3.connect(DB_FILENAME)
     cur = con.cursor()
-    cur.execute("select * from test where username = '%s'" % name)
+    cur.execute("select * from users where username = '%s'" % name)
     data = str(cur.fetchall())
     logging.debug(data)
     con.close()
@@ -95,13 +90,14 @@ def get_user(name=None):
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    """Register a new user"""
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         admin = request.form.get('admin')
         con = sqlite3.connect(DB_FILENAME)
         cur = con.cursor()
-        cur.execute("insert into test (username, password, admin) values ('%s', '%s', '%s')" % (username, password, admin))
+        cur.execute("insert into users (username, password, admin) values ('%s', '%s', '%s')" % (username, password, admin))
         con.commit()
         con.close()
         return jsonify(data="User added"), 200
@@ -115,47 +111,33 @@ def register():
         </form>
         '''
 
-@app.route("/welcome/<string:name>")
+@app.route("/welcome_admin/<string:name>")
 def welcome(name):
-    """Used to welcome new users to the app, via email"""
+    """Used to welcome new admin users, via email"""
     data="Welcome " + name
-    return jsonify(data=data), 200
+    return data, 200
 
-@app.route("/welcome2/<string:name>")
-def welcome2(name):
-    data="Welcome "+name
-    return data
 
-@app.route("/hello")
-def hello_ssti():
+@app.route("/welcome_user")
+def welcome_user():
+    """Used to welcome new users, via email"""
     if request.args.get('name'):
         name = request.args.get('name')
         template = f'''<div>
         <h1>Hello</h1>
-        {name}
+        {name} to the awesome site!
 </div>
 '''
         import logging
-        logging.basicConfig(filename="restapi.log", filemode='w', level=logging.DEBUG)
+        logging.basicConfig(filename=LOG_FILENAME, filemode='w', level=logging.DEBUG)
         logging.debug(str(template))
         return render_template_string(template)
-
-# @app.route("/get_users")
-# def get_users():
-#     try:
-#         hostname = request.args.get('hostname')
-#         command = "dig " + hostname
-#         data = subprocess.check_output(command, shell=True)
-#         return data
-#     except:
-#         data = str(hostname) + " username didn't found"
-#         return data
 
 @app.route("/get_log/")
 def get_log():
     try:
-        command="cat restapi.log"
-        data=subprocess.check_output(command,shell=True)
+        command = "cat restapi.log"
+        data = subprocess.check_output(command, shell=True)
         return data
     except:
         return jsonify(data="Command didn't run"), 200
@@ -168,7 +150,7 @@ def read_file():
     data = file.read()
     file.close()
     import logging
-    logging.basicConfig(filename="restapi.log", filemode='w', level=logging.DEBUG)
+    logging.basicConfig(filename=LOG_FILENAME, filemode='w', level=logging.DEBUG)
     logging.debug(str(data))
     return jsonify(data=data),200
 
@@ -195,7 +177,7 @@ def get_admin_mail(control):
     if control=="admin":
         data="admin@cybersecurity.intra"
         import logging
-        logging.basicConfig(filename="restapi.log", filemode='w', level=logging.DEBUG)
+        logging.basicConfig(filename=LOG_FILENAME, filemode='w', level=logging.DEBUG)
         logging.debug(data)
         return jsonify(data=data),200
     else:
@@ -272,7 +254,7 @@ def route():
 def ImproperOutputNeutralizationforLogs():
     data = request.args.get('data')
     import logging
-    logging.basicConfig(filename="restapi.log", filemode='w', level=logging.DEBUG)
+    logging.basicConfig(filename=LOG_FILENAME, filemode='w', level=logging.DEBUG)
     logging.debug(data)
     return jsonify(data="Logging ok"), 200
 
